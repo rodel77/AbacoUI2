@@ -88,18 +88,26 @@ pub const Scanner = struct {
         if(self.eof()) return false;
 
         const token = self.peek();
-        if(token=='\n'){
-            _ = self.next();
-            self.line += 1;
-            return true;
+        switch(token){
+            '\n' => {
+                _ = self.next();
+                self.line += 1;
+                return true;
+            },
+            '\r' => {
+                _ = self.next();
+                return true;
+            },
+            else => {
+                return false;
+            }
         }
-
-        return false;
     }
 
     pub fn consume_expression(self: *Self) []const u8 {
         const start = self.current;
-        while(!self.eof() and self.peek()!='\n'){
+
+        while(!self.eof() and self.peek()!='\n' and self.peek()!='\r'){
             self.current += 1;
         }
 
@@ -110,7 +118,7 @@ pub const Scanner = struct {
 
     pub fn consume_string(self: *Self) []const u8 {
         const start = self.current;
-        while(!self.eof() and self.peek()!=' ' and self.peek()!='\n'){
+        while(!self.eof() and self.peek()!=' ' and self.peek()!='\n' and self.peek()!='\r'){
             self.current += 1;
         }
 
@@ -150,13 +158,11 @@ pub const Scanner = struct {
             class.native = token==':';
             class.indent = indent;
 
-            // print("created class\n", .{});
-
             _ = self.next();
             const class_type = self.consume_string();
             class.type = class_type;
 
-            if(self.eof() or self.peek()=='\n') return;
+            if(self.eof() or self.peek()=='\n' or self.peek()=='\r') return;
 
             const class_name = self.consume_string();
             class.name = class_name;
@@ -172,7 +178,7 @@ pub const Scanner = struct {
         // parse property set
         const property = self.consume_string();
 
-        if(self.eof() or self.peek()=='\n'){
+        if(self.eof() or self.peek()=='\n' or self.peek()=='\r'){
             // @TODO: error handling
             print("[error] expression expected!", .{});
         }

@@ -1,0 +1,7 @@
+.vscode
+
+zig-out
+.zig-cache
+
+test-files
+*.ps1

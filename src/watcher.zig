@@ -62,16 +62,17 @@ pub const Watcher = struct {
     fn read_event(self: *Watcher, event: *[4096] u8) !?[]u8 {
         const file_information: *const windows.FILE_NOTIFY_INFORMATION = @ptrCast(@alignCast(event));
 
-
         if(file_information.Action==windows.FILE_ACTION_REMOVED or file_information.Action==windows.FILE_ACTION_RENAMED_OLD_NAME) return null;
 
         const ptr = &event[@sizeOf(windows.FILE_NOTIFY_INFORMATION)];
         const name_ptr: *u16 = @ptrCast(@alignCast(ptr));
         const name: [*]u16 = @ptrCast(name_ptr);
         const filename_utf16 = name[0..file_information.FileNameLength / 2];
-        var name_data: [std.fs.MAX_PATH_BYTES]u8 = undefined;
-        const basename = name_data[0..(try std.unicode.utf16leToUtf8(&name_data, filename_utf16))];
+        var name_data: [std.fs.max_path_bytes]u8 = undefined;
+        const basename = name_data[0..(try std.unicode.utf16LeToUtf8(&name_data, filename_utf16))];
         // std.debug.print("File changed {s} action {d}\n", .{basename, file_information.Action});
+
+        // std.time.sleep(100);
 
         const path = try self.dir.realpathAlloc(self.allocator, basename);
         _ = std.mem.lastIndexOf(u8, path[0..path.len], ".ui") orelse return null;
@@ -79,15 +80,20 @@ pub const Watcher = struct {
     }
 
     pub fn next_event(self: *Watcher) !?[]u8 {
+        const notify_filter = windows.FileNotifyChangeFilter {
+            .dir_name = true,
+            .file_name = true,
+            .attributes = true,
+            .last_write = true,
+            .creation = true,
+        };
+
         const result = windows.kernel32.ReadDirectoryChangesW(
             self.handle,
             &self.event_buffer,
             self.event_buffer.len,
             windows.TRUE,
-            windows.FILE_NOTIFY_CHANGE_FILE_NAME | windows.FILE_NOTIFY_CHANGE_DIR_NAME |
-                            windows.FILE_NOTIFY_CHANGE_ATTRIBUTES | windows.FILE_NOTIFY_CHANGE_SIZE |
-                            windows.FILE_NOTIFY_CHANGE_LAST_WRITE | windows.FILE_NOTIFY_CHANGE_LAST_ACCESS |
-                            windows.FILE_NOTIFY_CHANGE_CREATION | windows.FILE_NOTIFY_CHANGE_SECURITY,
+            notify_filter,
             null,
             &self.overlapped,
             null

@@ -67,19 +67,28 @@ pub fn main() !void {
     const address = std.net.Address.initIp4(host, 2379);
     http_server = try Server.init(allocator, address, handle_http_request);
 
-    try http_server.listen();
 
     while(try walker.next()) |entry| {
         const extension = std.fs.path.extension(entry.path);
         if(!std.mem.eql(u8, extension, EXTENSION)) continue;
 
-        const file = try dir.openFile(entry.path, .{});
+        const file: std.fs.File = dir.openFile(entry.path, .{}) catch |err| {
+            if(err==error.AccessDenied) continue;
+            unreachable;
+        };
+
         try process_file(allocator, dir, entry.path, &file);
         file.close();
     }
 
+    try http_server.listen();
+
     while(true){
-        const result_path = try dir_watcher.next_event();
+        const result_path = dir_watcher.next_event() catch |err| {
+            if(err==error.AccessDenied) continue;
+            print("Error reading dir: {?}", .{err});
+            continue;
+        };
         if(result_path) |p| {
             const file = try dir_watcher.dir.openFile(p, .{});
 
@@ -122,10 +131,37 @@ pub fn alloc_escape_string(allocator: Allocator, input: []const u8) ![]u8 {
     return buffer.toOwnedSlice();
 }
 
+pub fn find_path(path: []u8, cache: *std.StringHashMap([]u8)) ?[]const u8 {
+    if (cache.getEntry(path)) |entry| {
+        return entry.key_ptr.*;
+    }
+
+    // deep search
+    var iterator = cache.keyIterator();
+    while (iterator.next()) |key_ptr| {
+        const key = key_ptr.*;
+        const p = path;
+        if (ends_with(p, key)) {
+            return key_ptr.*;
+        }
+        if (ends_with(key, p)) {
+            return key_ptr.*;
+        }
+    }
+
+    return null;
+}
+
 pub fn prepare_response(allocator: Allocator, paths: [][]u8, cache: *std.StringHashMap([]u8), buffer: *std.ArrayList(u8)) !void {
     try buffer.append('{');
     for (paths, 0..) |path, index| {
-        const entry = cache.getEntry(path).?;
+        const p = find_path(path, cache);
+        if(p == null) {
+            print("path not found: {s}", .{path});
+            unreachable;
+        }
+        const key = p.?;
+        const entry = cache.getEntry(key).?;
 
         const result = try alloc_escape_string(allocator, entry.value_ptr.*);
         try buffer.writer().print("\"{s}\": \"{s}\"", .{entry.key_ptr.*, result});

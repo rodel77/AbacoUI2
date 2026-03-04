@@ -84,6 +84,10 @@ pub const Scanner = struct {
         return self.current >= self.source.len;
     }
 
+    pub fn report_error(self: *Self, message: []const u8) void {
+        print("[error] {s} at \"{s}\" {d}\n", .{message, self.name, self.line});
+    }
+
     pub fn check_newline(self: *Self) bool {
         if(self.eof()) return false;
 
@@ -169,7 +173,7 @@ pub const Scanner = struct {
 
             if(!self.eof() and !self.check_newline()){
                 // TODO err
-                print("new line expected\n", .{});
+                self.report_error("new line expected");
             }
 
             return;
@@ -180,13 +184,13 @@ pub const Scanner = struct {
 
         if(self.eof() or self.peek()=='\n' or self.peek()=='\r'){
             // @TODO: error handling
-            print("[error] expression expected!", .{});
+            self.report_error("expression expected");
         }
 
         const expression = self.consume_expression();
 
         if(self.classes.items.len==0){
-            print("[error] no class found to assign property.\n", .{});
+            self.report_error("no class found to assign property");
             return;
         }
 

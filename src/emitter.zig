@@ -17,7 +17,7 @@ pub const Emitter = struct {
 
     out: *ArrayList(u8),
     scanner: *Scanner,
-    element_count: usize = 0,
+    element_count: usize = 1,
     stack: ArrayList(*Class),
     ids: ArrayList(IDBound),
     allocator: Allocator,
@@ -43,6 +43,8 @@ pub const Emitter = struct {
     pub fn emit(self: *Self, file: []const u8) !void {
         try self.out.appendSlice("-- Auto generated with AbacoUI\n");
         try self.out.appendSlice("return function()\n");
+        try self.out.appendSlice("    local elements = {}\n");
+        try self.out.appendSlice("    local temp;\n\n");
 
         if(self.scanner.classes.items.len>0){
             var count: usize = 0;
@@ -57,8 +59,8 @@ pub const Emitter = struct {
 
                 class.element_id = self.element_count;
                 try self.stack.append(class);
-
                 self.element_count += 1;
+
 
                 // emit aspect ratio
                 for(class.attributes.items) |attribute| {
@@ -86,11 +88,11 @@ pub const Emitter = struct {
             }
         }
 
-        try self.out.appendSlice("    return element0, {");
+        try self.out.appendSlice("    return elements[1], {");
 
         // id bounds
         for(self.ids.items) |id_bound| {
-            try self.out.writer().print("[\"{s}\"] = element{d},", . {id_bound.id_name, id_bound.element_id});
+            try self.out.writer().print("[\"{s}\"] = elements[{d}],", . {id_bound.id_name, id_bound.element_id});
         }
 
         try self.out.appendSlice("}, {}, ");
@@ -106,7 +108,7 @@ pub const Emitter = struct {
 
     pub fn emit_custom_class(self: *Self, class: *Class) !void {
         if(class.type) |type_val| {
-            try self.out.writer().print("    local element{d} = UI.createElement(\"{s}\", {c}\n", .{self.element_count, type_val, '{'});
+            try self.out.writer().print("    elements[{d}] = UI.createElement(\"{s}\", {c}\n", .{self.element_count, type_val, '{'});
         }else{
             print("missing class type\n", .{});
             return;
@@ -149,7 +151,7 @@ pub const Emitter = struct {
 
                 last = self.stack.getLast();
             }
-            try self.out.writer().print("    {c}, nil, element{d});\n", .{'}', last.element_id});
+            try self.out.writer().print("    {c}, nil, elements[{d}]);\n", .{'}', last.element_id});
         }
 
         try self.out.append('\n');
@@ -157,7 +159,7 @@ pub const Emitter = struct {
 
     pub fn emit_class(self: *Self, class: *Class) !void {
         if(class.type) |type_val| {
-            try self.out.writer().print("    local element{d} = Instance.new(\"{s}\");\n", .{self.element_count, type_val});
+            try self.out.writer().print("    elements[{d}] = Instance.new(\"{s}\");\n", .{self.element_count, type_val});
         }else{
             print("missing class type\n", .{});
             return;
@@ -165,7 +167,7 @@ pub const Emitter = struct {
 
         // inject name
         if(class.name) |name| {
-            try self.out.writer().print("    element{d}.Name = \"{s}\";\n", .{self.element_count, name});
+            try self.out.writer().print("    elements[{d}].Name = \"{s}\";\n", .{self.element_count, name});
         }
 
         for (class.attributes.items) |attribute| {
@@ -183,7 +185,7 @@ pub const Emitter = struct {
                 !std.mem.eql(u8, class.type.?, "UIAspectRatioConstraint")
             ) continue;
 
-            try self.out.writer().print("    element{d}.{s} = {s};\n", .{
+            try self.out.writer().print("    elements[{d}].{s} = {s};\n", .{
                 self.element_count,
                 attribute.name,
                 attribute.expression,
@@ -202,7 +204,7 @@ pub const Emitter = struct {
 
                 last = self.stack.getLast();
             }
-            try self.out.writer().print("    element{d}.Parent = element{d};\n", .{self.element_count, last.element_id});
+            try self.out.writer().print("    elements[{d}].Parent = elements[{d}];\n", .{self.element_count, last.element_id});
         }
 
         try self.out.append('\n');
